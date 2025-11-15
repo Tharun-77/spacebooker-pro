@@ -35,14 +35,52 @@ export const BookingForm = ({ spaceId, spaceType, spaceName }: BookingFormProps)
   const [startHour, setStartHour] = useState(9);
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [userName, setUserName] = useState('');
-  const [bookedDates, setBookedDates] = useState<Date[]>([]);
+  const [existingBookings, setExistingBookings] = useState<any[]>([]);
 
   useEffect(() => {
-    const existingBookings = JSON.parse(localStorage.getItem('bookings') || '[]');
-    const spaceBookings = existingBookings.filter((booking: any) => booking.spaceId === spaceId);
-    const dates = spaceBookings.map((booking: any) => new Date(booking.date));
-    setBookedDates(dates);
+    const bookings = JSON.parse(localStorage.getItem('bookings') || '[]');
+    const spaceBookings = bookings.filter((booking: any) => booking.spaceId === spaceId);
+    setExistingBookings(spaceBookings);
   }, [spaceId]);
+
+  // Get booked hours for a specific date
+  const getBookedHoursForDate = (checkDate: Date) => {
+    const bookedHours: number[] = [];
+    existingBookings.forEach((booking: any) => {
+      const bookingDate = new Date(booking.date);
+      if (isSameDay(bookingDate, checkDate)) {
+        if (booking.duration === 'hourly') {
+          // Add all hours in the booking range
+          for (let i = 0; i < booking.hours; i++) {
+            bookedHours.push(booking.startHour + i);
+          }
+        } else {
+          // Daily or monthly bookings take the entire day
+          for (let i = 0; i < 24; i++) {
+            bookedHours.push(i);
+          }
+        }
+      }
+    });
+    return bookedHours;
+  };
+
+  // Check if a date should be disabled (only if fully booked or has daily/monthly booking)
+  const isDateDisabled = (checkDate: Date) => {
+    if (checkDate < new Date(new Date().setHours(0, 0, 0, 0))) return true;
+    
+    const bookedHours = getBookedHoursForDate(checkDate);
+    // Disable if all 24 hours are booked or if there's a daily/monthly booking
+    return bookedHours.length >= 24;
+  };
+
+  // Get available hours for the selected date
+  const getAvailableHours = () => {
+    if (!date) return Array.from({ length: 24 }, (_, i) => i);
+    
+    const bookedHours = getBookedHoursForDate(date);
+    return Array.from({ length: 24 }, (_, i) => i).filter(hour => !bookedHours.includes(hour));
+  };
 
   const totalPrice = calculatePrice(
     spaceType,
@@ -140,10 +178,7 @@ export const BookingForm = ({ spaceId, spaceType, spaceName }: BookingFormProps)
                 selected={date}
                 onSelect={setDate}
                 initialFocus
-                disabled={(date) => 
-                  date < new Date(new Date().setHours(0, 0, 0, 0)) || 
-                  bookedDates.some(bookedDate => isSameDay(bookedDate, date))
-                }
+                disabled={isDateDisabled}
               />
             </PopoverContent>
           </Popover>
@@ -164,16 +199,23 @@ export const BookingForm = ({ spaceId, spaceType, spaceName }: BookingFormProps)
             </div>
             <div className="space-y-2">
               <Label htmlFor="start-hour">Start Time (Hour)</Label>
-              <Input
+              <select
                 id="start-hour"
-                type="number"
-                min="0"
-                max="23"
                 value={startHour}
-                onChange={(e) => setStartHour(parseInt(e.target.value) || 9)}
-              />
+                onChange={(e) => setStartHour(parseInt(e.target.value))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                {getAvailableHours().map((hour) => (
+                  <option key={hour} value={hour}>
+                    {hour}:00 - {hour + 1}:00 {hour >= 9 && hour <= 17 ? '(Peak)' : ''}
+                  </option>
+                ))}
+              </select>
               {startHour >= 9 && startHour <= 17 && (
                 <p className="text-xs text-accent">Peak hours - 30% premium</p>
+              )}
+              {date && getAvailableHours().length === 0 && (
+                <p className="text-xs text-destructive">No available hours for this date</p>
               )}
             </div>
           </>
