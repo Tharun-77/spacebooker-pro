@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
+import { format, isSameDay } from "date-fns";
 import { cn } from "@/lib/utils";
 import { BookingDuration, calculatePrice, RESOURCE_PRICES } from "@/lib/pricing";
 import { useNavigate } from "react-router-dom";
@@ -35,6 +35,14 @@ export const BookingForm = ({ spaceId, spaceType, spaceName }: BookingFormProps)
   const [startHour, setStartHour] = useState(9);
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [userName, setUserName] = useState('');
+  const [bookedDates, setBookedDates] = useState<Date[]>([]);
+
+  useEffect(() => {
+    const existingBookings = JSON.parse(localStorage.getItem('bookings') || '[]');
+    const spaceBookings = existingBookings.filter((booking: any) => booking.spaceId === spaceId);
+    const dates = spaceBookings.map((booking: any) => new Date(booking.date));
+    setBookedDates(dates);
+  }, [spaceId]);
 
   const totalPrice = calculatePrice(
     spaceType,
@@ -132,7 +140,10 @@ export const BookingForm = ({ spaceId, spaceType, spaceName }: BookingFormProps)
                 selected={date}
                 onSelect={setDate}
                 initialFocus
-                disabled={(date) => date < new Date()}
+                disabled={(date) => 
+                  date < new Date(new Date().setHours(0, 0, 0, 0)) || 
+                  bookedDates.some(bookedDate => isSameDay(bookedDate, date))
+                }
               />
             </PopoverContent>
           </Popover>
